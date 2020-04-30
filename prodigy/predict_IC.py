@@ -164,30 +164,46 @@ class Prodigy:
         return_dict.update(self.bins)
         return return_dict
 
-    def print_prediction(self, outfile='', quiet=False):
+    def print_prediction(self, outfile=None, quiet=False):
+        property2value={
+            self.structure.id: self.ba_val,
+            "No. of chains": len(set([c.id for c in self.structure.get_chains()])),
+            "No. of residues": len(list(self.structure.get_residues())),
+            "No. of intermolecular contacts":len(self.ic_network),
+            "No. of charged-charged contacts": self.bins['CC'],
+            "No. of charged-polar contacts": self.bins['CP'],
+            "No. of charged-apolar contacts": self.bins['AC'],
+            "No. of polar-polar contacts": self.bins['PP'],
+            "No. of apolar-polar contacts": self.bins['AP'],
+            "No. of apolar-apolar contacts": self.bins['AA'],
+            "Percentage of apolar NIS residues": self.nis_a,
+            "Percentage of charged NIS residues": self.nis_c,
+            "Predicted binding affinity (kcal.mol-1)": self.ba_val,
+            "Temperature":self.temp,
+            "Predicted dissociation constant (M)":self.kd_val,
+        }
         if outfile:
-            handle = open(outfile, 'w')
+            import json
+            with open(outfile, 'w') as handle:
+                json.dump(property2value, handle)            
         else:
             handle = sys.stdout
+            if quiet:
+                handle.write('{0}\t{1:8.3f}\n'.format(self.structure.id, self.ba_val))
+            else:
+                handle.write('[+] No. of intermolecular contacts: {0}\n'.format(len(self.ic_network)))
+                handle.write('[+] No. of charged-charged contacts: {0}\n'.format(self.bins['CC']))
+                handle.write('[+] No. of charged-polar contacts: {0}\n'.format(self.bins['CP']))
+                handle.write('[+] No. of charged-apolar contacts: {0}\n'.format(self.bins['AC']))
+                handle.write('[+] No. of polar-polar contacts: {0}\n'.format(self.bins['PP']))
+                handle.write('[+] No. of apolar-polar contacts: {0}\n'.format(self.bins['AP']))
+                handle.write('[+] No. of apolar-apolar contacts: {0}\n'.format(self.bins['AA']))
+                handle.write('[+] Percentage of apolar NIS residues: {0:3.2f}\n'.format(self.nis_a))
+                handle.write('[+] Percentage of charged NIS residues: {0:3.2f}\n'.format(self.nis_c))
+                handle.write('[++] Predicted binding affinity (kcal.mol-1): {0:8.1f}\n'.format(self.ba_val))
+                handle.write(
+                    '[++] Predicted dissociation constant (M) at {:.1f}˚C: {:8.1e}\n'.format(self.temp, self.kd_val))
 
-        if quiet:
-            handle.write('{0}\t{1:8.3f}\n'.format(self.structure.id, self.ba_val))
-        else:
-            handle.write('[+] No. of intermolecular contacts: {0}\n'.format(len(self.ic_network)))
-            handle.write('[+] No. of charged-charged contacts: {0}\n'.format(self.bins['CC']))
-            handle.write('[+] No. of charged-polar contacts: {0}\n'.format(self.bins['CP']))
-            handle.write('[+] No. of charged-apolar contacts: {0}\n'.format(self.bins['AC']))
-            handle.write('[+] No. of polar-polar contacts: {0}\n'.format(self.bins['PP']))
-            handle.write('[+] No. of apolar-polar contacts: {0}\n'.format(self.bins['AP']))
-            handle.write('[+] No. of apolar-apolar contacts: {0}\n'.format(self.bins['AA']))
-            handle.write('[+] Percentage of apolar NIS residues: {0:3.2f}\n'.format(self.nis_a))
-            handle.write('[+] Percentage of charged NIS residues: {0:3.2f}\n'.format(self.nis_c))
-            handle.write('[++] Predicted binding affinity (kcal.mol-1): {0:8.1f}\n'.format(self.ba_val))
-            handle.write(
-                '[++] Predicted dissociation constant (M) at {:.1f}˚C: {:8.1e}\n'.format(self.temp, self.kd_val))
-
-        if handle is not sys.stdout:
-            handle.close()
 
     def print_contacts(self, outfile=''):
         if outfile:
@@ -255,6 +271,7 @@ def main():
     ap.add_argument('--temperature', type=float, default=25.0, help='Temperature (C) for Kd prediction')
     ap.add_argument('--contact_list', action='store_true', help='Output a list of contacts')
     ap.add_argument('--pymol_selection', action='store_true', help='Output a script to highlight the interface (pymol)')
+    ap.add_argument('--outfile', type=str, help='Output file')
     ap.add_argument('-q', '--quiet', action='store_true', help='Outputs only the predicted affinity value')
     ap.add_argument('-V', '--version', action='version', version='%(prog)s {}'.format(__version__),
                     help='Print the version and exit.')
@@ -291,16 +308,17 @@ def main():
     logger.info('[+] Parsed structure file {0} ({1} chains, {2} residues)'.format(structure.id, n_chains, n_res))
     prodigy = Prodigy(structure, cmd.selection, cmd.temperature)
     prodigy.predict(distance_cutoff=cmd.distance_cutoff, acc_threshold=cmd.acc_threshold)
-    prodigy.print_prediction(quiet=cmd.quiet)
+    
+    prodigy.print_prediction(quiet=cmd.quiet,outfile=cmd.outfile + '.json')
 
     # Print out interaction network
     if cmd.contact_list:
-        fname = struct_path[:-4] + '.ic'
+        fname = cmd.outfile + '.ic'
         prodigy.print_contacts(fname)
 
     # Print out interaction network
     if cmd.pymol_selection:
-        fname = struct_path[:-4] + '.pml'
+        fname = cmd.outfile + '.pml'
         prodigy.print_pymol_script(fname)
 
 
